@@ -1,0 +1,66 @@
+name: Terrform-Deploy
+ 
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+ 
+jobs:
+  terraform:
+    name: Terrform-Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write  # Required for OIDC
+       
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: true
+      tf_resource_group_name: "thomasthorntoncloud"
+      tf_storage_account_name: "thomasthorntontfstate"
+      tf_state_container: "github-oidc-terraform-example-tfstate"
+      tf_state_key: "terraform.tfstate"
+ 
+ 
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+ 
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.11.0
+        terraform_wrapper: true
+ 
+ 
+    - name: Terraform Init
+      run: terraform init
+      working-directory: .
+ 
+    - name: Terraform Format
+      if: github.event_name == 'pull_request'
+      run: terraform fmt
+      working-directory: .
+ 
+    - name: Auto Commit Changes
+      uses: stefanzweifel/git-auto-commit-action@v5
+      if: github.event_name == 'pull_request'
+      with:
+        commit_message: "Terraform fmt"
+        file_pattern: "*.tf *.tfvars"
+        commit_user_name: "github-actions[bot]"
+ 
+    - name: Terraform Plan
+      run: terraform plan -no-color -input=false
+      working-directory: .
+ 
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      run: terraform apply -auto-approve -input=false
+      working-directory: .
